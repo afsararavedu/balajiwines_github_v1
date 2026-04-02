@@ -471,6 +471,49 @@ export async function registerRoutes(
       // Fetch sales MRP overrides
       const salesMrpList = await storage.getSalesMrpDetails();
 
+      // Helper: find MRP override for a brand+size
+      const findMrpOverride = (brandNumber: string, size: string) => {
+        return salesMrpList.find((m) => {
+          if (m.brandNumber !== brandNumber) return false;
+          const sNorm = normSize(m.size);
+          const dNorm = normSize(size);
+          return sNorm === dNorm || sNorm.includes(dNorm) || dNorm.includes(sNorm);
+        });
+      };
+
+      // If no daily_sales exist for this date yet, generate virtual rows from
+      // the previous day's daily_stock snapshot so the table is pre-populated.
+      if (sales.length === 0 && prevDayStock.length > 0) {
+        const virtualRows = prevDayStock.map((stock, idx) => {
+          const orderKey = `${stock.brandNumber}|${normSize(stock.size)}`;
+          const orderAgg = orderNewStk.get(orderKey);
+          const mrpOverride = findMrpOverride(stock.brandNumber, stock.size);
+          return {
+            id: -(idx + 1), // temporary ID — becomes a real DB row on first Save
+            brandNumber: stock.brandNumber,
+            brandName: stock.brandName,
+            size: stock.size,
+            quantityPerCase: stock.quantityPerCase,
+            openingBalanceBottles: stock.totalStockBottles ?? 0,
+            newStockCases: orderAgg ? orderAgg.cases : 0,
+            newStockBottles: orderAgg ? orderAgg.bottles : 0,
+            closingBalanceCases: 0,
+            closingBalanceBottles: 0,
+            soldBottles: 0,
+            mrp: mrpOverride ? mrpOverride.salesMrp : (stock.mrp || "0"),
+            saleValue: "0",
+            totalSaleValue: "0",
+            breakageBottles: 0,
+            totalClosingStock: 0,
+            finalClosingBalance: "0",
+            date: date,
+            isSubmitted: false,
+            createdAt: null,
+          };
+        });
+        return res.json(virtualRows);
+      }
+
       const salesWithOverrides = sales.map((sale) => {
         // Opening balance from previous day's stock snapshot
         const prevStock = prevDayStock.find((s) => {
@@ -483,13 +526,7 @@ export async function registerRoutes(
         // New Stk from matching orders for selected date
         const orderKey = `${sale.brandNumber}|${normSize(sale.size)}`;
         const orderAgg = orderNewStk.get(orderKey);
-
-        const mrpOverride = salesMrpList.find((m) => {
-          if (m.brandNumber !== sale.brandNumber) return false;
-          const sNorm = normSize(m.size);
-          const dNorm = normSize(sale.size);
-          return sNorm === dNorm || sNorm.includes(dNorm) || dNorm.includes(sNorm);
-        });
+        const mrpOverride = findMrpOverride(sale.brandNumber, sale.size);
 
         return {
           ...sale,
