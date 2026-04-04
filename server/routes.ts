@@ -569,14 +569,7 @@ export async function registerRoutes(
             const qtyPerCase = stock.quantityPerCase ?? 12;
             const newStockCases = orderAgg ? orderAgg.cases : 0;
             const newStockBottles = orderAgg ? orderAgg.bottles : 0;
-            // Auto-fill closing balance = total available stock (opening + new stock)
-            // so "no-sales" days save correctly without manual entry
-            const totalAvailableBottles = openingBalance + newStockCases * qtyPerCase + newStockBottles;
-            const closingBalanceCases = Math.floor(totalAvailableBottles / qtyPerCase);
-            const closingBalanceBottles = totalAvailableBottles % qtyPerCase;
-            const totalClosingStock = totalAvailableBottles;
             const mrpVal = mrpOverride ? mrpOverride.salesMrp : (stock.mrp || "0");
-            const finalClosingBalance = String(Math.round(Number(mrpVal) * totalClosingStock * 100) / 100);
             return {
               id: -(idx + 1),
               brandNumber: stock.brandNumber,
@@ -586,15 +579,15 @@ export async function registerRoutes(
               openingBalanceBottles: openingBalance,
               newStockCases,
               newStockBottles,
-              closingBalanceCases,
-              closingBalanceBottles,
+              closingBalanceCases: 0,
+              closingBalanceBottles: 0,
               soldBottles: 0,
               mrp: mrpVal,
               saleValue: "0",
               totalSaleValue: "0",
               breakageBottles: 0,
-              totalClosingStock,
-              finalClosingBalance,
+              totalClosingStock: 0,
+              finalClosingBalance: "0",
               saleDate: date,
               invoiceDate: stock.invoiceDate ?? null,
               isSubmitted: false,
