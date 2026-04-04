@@ -68,7 +68,7 @@ export const stockDetails = pgTable("stock_details", {
   totalStockValue: numeric("total_stock_value").default('0'),
   breakage: integer("breakage").default(0),
   remarks: text("remarks"),
-  date: date("date").defaultNow(),
+  invoiceDate: date("invoice_date").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

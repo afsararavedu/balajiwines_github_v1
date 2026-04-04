@@ -62,7 +62,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // One-time migration: rename daily_sales.date → daily_sales.sale_date (if not yet done)
+  // One-time migrations: rename columns to canonical names
   try {
     await db.execute(sql`
       DO $$ BEGIN
@@ -71,6 +71,12 @@ app.use((req, res, next) => {
           WHERE table_name='daily_sales' AND column_name='date'
         ) THEN
           ALTER TABLE daily_sales RENAME COLUMN "date" TO "sale_date";
+        END IF;
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='stock_details' AND column_name='date'
+        ) THEN
+          ALTER TABLE stock_details RENAME COLUMN "date" TO "invoice_date";
         END IF;
       END $$
     `);
