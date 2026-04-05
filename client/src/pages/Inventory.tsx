@@ -19,7 +19,7 @@ import {
   Tag,
   Pencil,
 } from "lucide-react";
-import { type InsertOrder, type Order, type ShopDetail, type StockDetail, type SalesMrpDetail } from "@shared/schema";
+import { type InsertOrder, type Order, type ShopDetail, type SalesMrpDetail } from "@shared/schema";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -107,16 +107,17 @@ export default function Inventory() {
   // === SALES MRP STATE ===
   const [mrpBrandNumber, setMrpBrandNumber] = useState("");
   const [mrpBrandName, setMrpBrandName] = useState("");
+  const [mrpProductType, setMrpProductType] = useState("");
   const [mrpSize, setMrpSize] = useState("");
-  const [mrpQtyPerCase, setMrpQtyPerCase] = useState<number | "">("");
   const [mrpValue, setMrpValue] = useState<number | "">("");
   const [mrpEditId, setMrpEditId] = useState<number | null>(null);
 
-  const { data: stockDetails } = useQuery<StockDetail[]>({
-    queryKey: [api.stock.list.path],
+  // All orders (without filters) for MRP dropdowns
+  const { data: allOrdersForMrp } = useQuery<Order[]>({
+    queryKey: ["/api/orders/all-for-mrp"],
     queryFn: async () => {
-      const res = await fetch(api.stock.list.path);
-      if (!res.ok) throw new Error("Failed to fetch stock");
+      const res = await fetch("/api/orders");
+      if (!res.ok) throw new Error("Failed to fetch orders");
       return res.json();
     },
   });
@@ -148,8 +149,8 @@ export default function Inventory() {
       toast({ title: "Saved", description: "Sales MRP updated successfully.", className: "bg-green-50 text-green-800" });
       setMrpBrandNumber("");
       setMrpBrandName("");
+      setMrpProductType("");
       setMrpSize("");
-      setMrpQtyPerCase("");
       setMrpValue("");
       setMrpEditId(null);
     },
@@ -158,41 +159,51 @@ export default function Inventory() {
     },
   });
 
-  // Derive unique values from stock for cascading dropdowns
-  const uniqueBrandNumbers = Array.from(new Set((stockDetails || []).map(s => s.brandNumber))).sort();
-  const filteredByBrandNo = (stockDetails || []).filter(s => s.brandNumber === mrpBrandNumber);
-  const uniqueBrandNames = Array.from(new Set(filteredByBrandNo.map(s => s.brandName))).sort();
-  const filteredByBrandName = filteredByBrandNo.filter(s => !mrpBrandName || s.brandName === mrpBrandName);
-  const uniqueSizes = Array.from(new Set(filteredByBrandName.map(s => s.size))).sort();
-  const filteredBySize = filteredByBrandName.filter(s => !mrpSize || s.size === mrpSize);
-  const uniqueQtys = Array.from(new Set(filteredBySize.map(s => s.quantityPerCase))).sort((a, b) => a - b);
+  // Helper to extract size from packSize like "48 / 180 ml" → "180 ml"
+  const extractMrpSize = (packSize: string) => {
+    const parts = packSize.split("/");
+    return parts.length >= 2 ? parts[1].trim() : packSize.trim();
+  };
+
+  // Derive unique values from orders for cascading dropdowns (Brand No → Brand Name → Type → Size)
+  const allMrpOrders = allOrdersForMrp || [];
+  const uniqueBrandNumbers = Array.from(new Set(allMrpOrders.map(o => o.brandNumber))).sort();
+  const filteredByBrandNo = allMrpOrders.filter(o => o.brandNumber === mrpBrandNumber);
+  const uniqueBrandNames = Array.from(new Set(filteredByBrandNo.map(o => o.brandName))).sort();
+  const filteredByBrandName = filteredByBrandNo.filter(o => !mrpBrandName || o.brandName === mrpBrandName);
+  const uniqueTypes = Array.from(new Set(filteredByBrandName.map(o => o.productType))).sort();
+  const filteredByType = filteredByBrandName.filter(o => !mrpProductType || o.productType === mrpProductType);
+  const uniqueSizes = Array.from(new Set(filteredByType.map(o => extractMrpSize(o.packSize)))).sort();
 
   const handleMrpBrandNumberChange = (val: string) => {
     setMrpBrandNumber(val);
-    const match = (stockDetails || []).find(s => s.brandNumber === val);
-    setMrpBrandName(match?.brandName || "");
+    setMrpBrandName("");
+    setMrpProductType("");
     setMrpSize("");
-    setMrpQtyPerCase("");
   };
 
-  const handleMrpSizeChange = (val: string) => {
-    setMrpSize(val);
-    setMrpQtyPerCase("");
-    const match = filteredByBrandName.find(s => s.size === val);
-    if (match) setMrpQtyPerCase(match.quantityPerCase);
+  const handleMrpBrandNameChange = (val: string) => {
+    setMrpBrandName(val);
+    setMrpProductType("");
+    setMrpSize("");
+  };
+
+  const handleMrpTypeChange = (val: string) => {
+    setMrpProductType(val);
+    setMrpSize("");
   };
 
   const handleLoadMrpEdit = (row: SalesMrpDetail) => {
     setMrpEditId(row.id);
     setMrpBrandNumber(row.brandNumber);
     setMrpBrandName(row.brandName);
+    setMrpProductType(row.productType ?? "");
     setMrpSize(row.size);
-    setMrpQtyPerCase(row.quantityPerCase);
     setMrpValue(parseFloat(row.salesMrp as string));
   };
 
   const handleSaveMrp = () => {
-    if (!mrpBrandNumber || !mrpBrandName || !mrpSize || mrpQtyPerCase === "" || mrpValue === "") {
+    if (!mrpBrandNumber || !mrpBrandName || !mrpProductType || !mrpSize || mrpValue === "") {
       toast({ title: "Validation Error", description: "Please fill in all fields.", variant: "destructive" });
       return;
     }
@@ -204,7 +215,7 @@ export default function Inventory() {
       brandNumber: mrpBrandNumber,
       brandName: mrpBrandName,
       size: mrpSize,
-      quantityPerCase: Number(mrpQtyPerCase),
+      productType: mrpProductType,
       salesMrp: String(mrpValue),
     });
   };
@@ -780,7 +791,7 @@ export default function Inventory() {
                   <select
                     className="input-field"
                     value={mrpBrandName}
-                    onChange={(e) => { setMrpBrandName(e.target.value); setMrpSize(""); setMrpQtyPerCase(""); }}
+                    onChange={(e) => handleMrpBrandNameChange(e.target.value)}
                     disabled={!mrpBrandNumber}
                     data-testid="select-mrp-brand-name"
                   >
@@ -791,36 +802,36 @@ export default function Inventory() {
                   </select>
                 </div>
 
+                {/* Type */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Type</label>
+                  <select
+                    className="input-field"
+                    value={mrpProductType}
+                    onChange={(e) => handleMrpTypeChange(e.target.value)}
+                    disabled={!mrpBrandName}
+                    data-testid="select-mrp-product-type"
+                  >
+                    <option value="">-- Select --</option>
+                    {uniqueTypes.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Size */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Size</label>
                   <select
                     className="input-field"
                     value={mrpSize}
-                    onChange={(e) => handleMrpSizeChange(e.target.value)}
-                    disabled={!mrpBrandName}
+                    onChange={(e) => setMrpSize(e.target.value)}
+                    disabled={!mrpProductType}
                     data-testid="select-mrp-size"
                   >
                     <option value="">-- Select --</option>
                     {uniqueSizes.map(s => (
                       <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Qty/Cs */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Qty / Cs</label>
-                  <select
-                    className="input-field"
-                    value={mrpQtyPerCase}
-                    onChange={(e) => setMrpQtyPerCase(e.target.value ? Number(e.target.value) : "")}
-                    disabled={!mrpSize}
-                    data-testid="select-mrp-qty-per-case"
-                  >
-                    <option value="">-- Select --</option>
-                    {uniqueQtys.map(q => (
-                      <option key={q} value={q}>{q}</option>
                     ))}
                   </select>
                 </div>
@@ -853,7 +864,7 @@ export default function Inventory() {
                 </button>
                 {mrpEditId && (
                   <button
-                    onClick={() => { setMrpBrandNumber(""); setMrpBrandName(""); setMrpSize(""); setMrpQtyPerCase(""); setMrpValue(""); setMrpEditId(null); }}
+                    onClick={() => { setMrpBrandNumber(""); setMrpBrandName(""); setMrpProductType(""); setMrpSize(""); setMrpValue(""); setMrpEditId(null); }}
                     className="px-4 py-2 border border-border rounded-xl font-medium hover:bg-muted transition-all text-sm"
                   >
                     Cancel Edit
@@ -886,8 +897,8 @@ export default function Inventory() {
                         <th className="table-header w-8">SNo</th>
                         <th className="table-header w-20">Brand No</th>
                         <th className="table-header w-40">Brand Name</th>
+                        <th className="table-header w-16 text-center">Type</th>
                         <th className="table-header w-20">Size</th>
-                        <th className="table-header w-16 text-center">Qty/Cs</th>
                         <th className="table-header w-24 text-right font-bold text-primary bg-primary/5">Sales MRP (₹)</th>
                         <th className="table-header w-16 text-center">Action</th>
                       </tr>
@@ -898,8 +909,8 @@ export default function Inventory() {
                           <td className="table-cell text-center text-xs text-muted-foreground">{idx + 1}</td>
                           <td className="table-cell font-mono text-xs text-muted-foreground">{row.brandNumber}</td>
                           <td className="table-cell font-medium">{row.brandName}</td>
+                          <td className="table-cell text-center text-muted-foreground">{row.productType}</td>
                           <td className="table-cell text-muted-foreground">{row.size}</td>
-                          <td className="table-cell text-center">{row.quantityPerCase}</td>
                           <td className="table-cell text-right font-bold text-primary font-mono bg-primary/5">₹{row.salesMrp}</td>
                           <td className="table-cell text-center">
                             <button

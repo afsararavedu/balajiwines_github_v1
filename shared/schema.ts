@@ -190,11 +190,11 @@ export const salesMrpDetails = pgTable("sales_mrp_details", {
   brandNumber: text("brand_number").notNull(),
   brandName: text("brand_name").notNull(),
   size: text("size").notNull(),
-  quantityPerCase: integer("quantity_per_case").notNull(),
+  productType: text("product_type").notNull().default(""),
   salesMrp: numeric("sales_mrp").notNull().default('0'),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  uniqueIndex("sales_mrp_brand_size_idx").on(table.brandNumber, table.brandName, table.size, table.quantityPerCase),
+  uniqueIndex("sales_mrp_brand_size_idx").on(table.brandNumber, table.brandName, table.size, table.productType),
 ]);
 
 export const insertSalesMrpDetailSchema = createInsertSchema(salesMrpDetails).omit({ id: true, updatedAt: true });

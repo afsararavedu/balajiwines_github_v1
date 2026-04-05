@@ -584,7 +584,7 @@ export class DatabaseStorage implements IStorage {
 
   async upsertSalesMrpDetail(data: InsertSalesMrpDetail): Promise<SalesMrpDetail> {
     const [result] = await db.insert(salesMrpDetails).values(data).onConflictDoUpdate({
-      target: [salesMrpDetails.brandNumber, salesMrpDetails.brandName, salesMrpDetails.size, salesMrpDetails.quantityPerCase],
+      target: [salesMrpDetails.brandNumber, salesMrpDetails.brandName, salesMrpDetails.size, salesMrpDetails.productType],
       set: {
         salesMrp: data.salesMrp,
         updatedAt: new Date(),

@@ -643,14 +643,14 @@ export async function registerRoutes(
 
   app.post("/api/sales-mrp", async (req, res) => {
     try {
-      const { brandNumber, brandName, size, quantityPerCase, salesMrp } = req.body;
-      if (!brandNumber || !brandName || !size || !quantityPerCase) {
-        return res.status(400).json({ message: "brandNumber, brandName, size, and quantityPerCase are required" });
+      const { brandNumber, brandName, size, productType, salesMrp } = req.body;
+      if (!brandNumber || !brandName || !size || !productType) {
+        return res.status(400).json({ message: "brandNumber, brandName, size, and productType are required" });
       }
       if (parseFloat(salesMrp) < 0) {
         return res.status(400).json({ message: "salesMrp must not be less than 0" });
       }
-      const result = await storage.upsertSalesMrpDetail({ brandNumber, brandName, size, quantityPerCase: Number(quantityPerCase), salesMrp: String(salesMrp) });
+      const result = await storage.upsertSalesMrpDetail({ brandNumber, brandName, size, productType, salesMrp: String(salesMrp) });
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
