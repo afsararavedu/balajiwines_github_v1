@@ -356,7 +356,27 @@ export default function Sales() {
       return;
     }
 
-    updateSales({ data: localSales, date: selectedDate }, {
+    // If Sold Btls = 0, set Tot Cls Stk = Total Stk (nothing was sold, full stock carries forward)
+    const dataToSave = localSales.map((item) => {
+      if ((item.soldBottles || 0) === 0) {
+        const totalStk =
+          (item.openingBalanceBottles || 0) +
+          (item.quantityPerCase || 0) * (item.newStockCases || 0) +
+          (item.newStockBottles || 0);
+        const finalClsStkBal = Math.round(totalStk - (item.breakageBottles || 0));
+        return {
+          ...item,
+          totalClosingStock: totalStk,
+          finalClosingBalance: finalClsStkBal,
+        };
+      }
+      return item;
+    });
+
+    // Reflect the corrected values in the UI immediately
+    setLocalSales(dataToSave);
+
+    updateSales({ data: dataToSave, date: selectedDate }, {
       onSuccess: () => {
         toast({
           title: "Sales Saved",
