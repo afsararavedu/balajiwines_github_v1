@@ -567,19 +567,61 @@ export async function registerRoutes(
       };
 
       // If no daily_sales exist for this date yet, generate virtual rows.
-      // Priority: orders whose invoice_date matches the selected date → each distinct
-      // brand/size from those orders becomes one row with New Stk (Cs/Btls) filled in.
-      // Fallback (no matching orders): use stock_details as before.
+      // CASE 2: Orders exist for this date → orders = new stock; prev day daily_sales = opening balance
+      //   • Match orders vs prev day daily_sales by Brand No + Brand Name + Size
+      //   • Unmatched prev day rows carry forward (opening balance, no new stock)
+      // CASE 1: No orders for this date → use prev day daily_sales as carry-forward rows
+      // FALLBACK: neither → use stock_details (legacy behaviour)
       if (sales.length === 0) {
+        // 3-field key for prev-day matching: Brand No | Brand Name | Size
+        const normKey3 = (brandNo: string, brandName: string, size: string) =>
+          `${brandNo}|${normStr(brandName)}|${normSize(size)}`;
+
+        // Build prev-day map by Brand No + Brand Name + Size
+        const prevDayMap = new Map<string, typeof prevDaySales[0]>();
+        for (const s of prevDaySales) {
+          prevDayMap.set(normKey3(s.brandNumber, s.brandName, s.size), s);
+        }
+
+        // Helper to build a virtual row from base fields
+        const makeVirtualRow = (
+          idx: number,
+          brandNumber: string,
+          brandName: string,
+          size: string,
+          quantityPerCase: number,
+          openingBalanceBottles: number,
+          newStockCases: number,
+          newStockBottles: number,
+          mrpVal: string,
+        ) => ({
+          id: -(idx + 1),
+          brandNumber,
+          brandName,
+          size,
+          quantityPerCase,
+          openingBalanceBottles,
+          newStockCases,
+          newStockBottles,
+          closingBalanceCases: 0,
+          closingBalanceBottles: 0,
+          soldBottles: 0,
+          mrp: mrpVal,
+          saleValue: "0",
+          totalSaleValue: "0",
+          breakageBottles: 0,
+          totalClosingStock: 0,
+          finalClosingBalance: 0,
+          saleDate: date,
+          invoiceDate: null,
+          isSubmitted: false,
+          createdAt: null,
+        });
+
         if (matchingOrders.length > 0) {
-          // Aggregate matching orders by brand+size into distinct rows
-          type OrderRowAgg = {
-            brandNumber: string;
-            brandName: string;
-            size: string;
-            cases: number;
-            bottles: number;
-          };
+          // ── CASE 2: orders exist ──
+          // Aggregate matching orders by Brand No + Size
+          type OrderRowAgg = { brandNumber: string; brandName: string; size: string; cases: number; bottles: number };
           const orderRowMap = new Map<string, OrderRowAgg>();
           for (const o of matchingOrders) {
             const size = extractSizeFromPackSize(o.packSize);
@@ -589,54 +631,51 @@ export async function registerRoutes(
               existing.cases += o.qtyCasesDelivered ?? 0;
               existing.bottles += o.qtyBottlesDelivered ?? 0;
             } else {
-              orderRowMap.set(key, {
-                brandNumber: o.brandNumber,
-                brandName: o.brandName,
-                size,
-                cases: o.qtyCasesDelivered ?? 0,
-                bottles: o.qtyBottlesDelivered ?? 0,
-              });
+              orderRowMap.set(key, { brandNumber: o.brandNumber, brandName: o.brandName, size, cases: o.qtyCasesDelivered ?? 0, bottles: o.qtyBottlesDelivered ?? 0 });
             }
           }
 
-          const virtualRows = Array.from(orderRowMap.values()).map((ord, idx) => {
-            // Look up stock_details for quantityPerCase and MRP
-            const stockMatch = allStock.find((s) =>
-              normKey2(s.brandNumber, s.size) === normKey2(ord.brandNumber, ord.size)
-            );
-            const qtyPerCase = stockMatch?.quantityPerCase ?? 12;
-            const key4 = normKey4(ord.brandNumber, ord.brandName, ord.size, qtyPerCase);
-            const openingBalance = openingBalMapFull.get(key4) ?? 0;
+          const virtualRows: ReturnType<typeof makeVirtualRow>[] = [];
+          const matchedPrevKeys = new Set<string>();
+
+          for (const [, ord] of Array.from(orderRowMap.entries())) {
+            // Try to find prev-day sale by Brand No + Brand Name + Size
+            const key3 = normKey3(ord.brandNumber, ord.brandName, ord.size);
+            const prevSale = prevDayMap.get(key3);
+            if (prevSale) matchedPrevKeys.add(key3);
+
+            const openingBalance = prevSale ? (prevSale.totalClosingStock ?? 0) : 0;
+            const stockMatch = allStock.find((s) => normKey2(s.brandNumber, s.size) === normKey2(ord.brandNumber, ord.size));
+            const qtyPerCase = prevSale?.quantityPerCase ?? stockMatch?.quantityPerCase ?? 12;
             const mrpOverride = findMrpOverride(ord.brandNumber, ord.size);
-            const mrpVal = mrpOverride ? mrpOverride.salesMrp : (stockMatch?.mrp || "0");
-            return {
-              id: -(idx + 1),
-              brandNumber: ord.brandNumber,
-              brandName: ord.brandName,
-              size: ord.size,
-              quantityPerCase: qtyPerCase,
-              openingBalanceBottles: openingBalance,
-              newStockCases: ord.cases,
-              newStockBottles: ord.bottles,
-              closingBalanceCases: 0,
-              closingBalanceBottles: 0,
-              soldBottles: 0,
-              mrp: mrpVal,
-              saleValue: "0",
-              totalSaleValue: "0",
-              breakageBottles: 0,
-              totalClosingStock: 0,
-              finalClosingBalance: 0,
-              saleDate: date,
-              invoiceDate: null,
-              isSubmitted: false,
-              createdAt: null,
-            };
+            const mrpVal = mrpOverride ? mrpOverride.salesMrp : (prevSale?.mrp ?? stockMatch?.mrp ?? "0");
+
+            virtualRows.push(makeVirtualRow(virtualRows.length, ord.brandNumber, ord.brandName, ord.size, qtyPerCase, openingBalance, ord.cases, ord.bottles, mrpVal));
+          }
+
+          // Carry-forward: prev day rows that had no matching order
+          for (const [key3, prevSale] of Array.from(prevDayMap.entries())) {
+            if (!matchedPrevKeys.has(key3)) {
+              const mrpOverride = findMrpOverride(prevSale.brandNumber, prevSale.size);
+              const mrpVal = mrpOverride ? mrpOverride.salesMrp : (prevSale.mrp ?? "0");
+              virtualRows.push(makeVirtualRow(virtualRows.length, prevSale.brandNumber, prevSale.brandName, prevSale.size, prevSale.quantityPerCase ?? 12, prevSale.totalClosingStock ?? 0, 0, 0, mrpVal));
+            }
+          }
+
+          return res.json(virtualRows);
+        }
+
+        // ── CASE 1: No orders → carry prev day daily_sales forward ──
+        if (prevDaySales.length > 0) {
+          const virtualRows = prevDaySales.map((sale, idx) => {
+            const mrpOverride = findMrpOverride(sale.brandNumber, sale.size);
+            const mrpVal = mrpOverride ? mrpOverride.salesMrp : (sale.mrp ?? "0");
+            return makeVirtualRow(idx, sale.brandNumber, sale.brandName, sale.size, sale.quantityPerCase ?? 12, sale.totalClosingStock ?? 0, 0, 0, mrpVal);
           });
           return res.json(virtualRows);
         }
 
-        // Fallback: no matching orders for this date → use stock_details
+        // ── FALLBACK: no orders, no prev day sales → use stock_details ──
         if (allStock.length > 0) {
           const virtualRows = allStock.map((stock, idx) => {
             const key4 = normKey4(stock.brandNumber, stock.brandName ?? "", stock.size, stock.quantityPerCase ?? 0);
