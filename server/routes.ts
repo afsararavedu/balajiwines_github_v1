@@ -450,6 +450,16 @@ function extractSizeFromPackSize(packSize: string): string {
   return parts.length >= 2 ? parts[1].trim() : packSize.trim();
 }
 
+/** Extract qty-per-case from packSize like "48 / 180 ml" → 48 (number before '/') */
+function extractQtyPerCaseFromPackSize(packSize: string): number {
+  const parts = packSize.split("/");
+  if (parts.length >= 2) {
+    const num = parseInt(parts[0].trim(), 10);
+    return isNaN(num) ? 0 : num;
+  }
+  return 0;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express,
@@ -621,8 +631,8 @@ export async function registerRoutes(
 
         if (matchingOrders.length > 0) {
           // ── CASE 2: orders exist ──
-          // Aggregate matching orders by Brand No + Size
-          type OrderRowAgg = { brandNumber: string; brandName: string; size: string; cases: number; bottles: number };
+          // Aggregate matching orders by Brand No + Size; keep packSize so we can extract qty/cs
+          type OrderRowAgg = { brandNumber: string; brandName: string; size: string; packSize: string; cases: number; bottles: number };
           const orderRowMap = new Map<string, OrderRowAgg>();
           for (const o of matchingOrders) {
             const size = extractSizeFromPackSize(o.packSize);
@@ -632,7 +642,7 @@ export async function registerRoutes(
               existing.cases += o.qtyCasesDelivered ?? 0;
               existing.bottles += o.qtyBottlesDelivered ?? 0;
             } else {
-              orderRowMap.set(key, { brandNumber: o.brandNumber, brandName: o.brandName, size, cases: o.qtyCasesDelivered ?? 0, bottles: o.qtyBottlesDelivered ?? 0 });
+              orderRowMap.set(key, { brandNumber: o.brandNumber, brandName: o.brandName, size, packSize: o.packSize, cases: o.qtyCasesDelivered ?? 0, bottles: o.qtyBottlesDelivered ?? 0 });
             }
           }
 
@@ -647,7 +657,9 @@ export async function registerRoutes(
 
             const openingBalance = prevSale ? (prevSale.totalClosingStock ?? 0) : 0;
             const stockMatch = allStock.find((s) => normKey2(s.brandNumber, s.size) === normKey2(ord.brandNumber, ord.size));
-            const qtyPerCase = prevSale?.quantityPerCase ?? stockMatch?.quantityPerCase ?? 12;
+            // Priority: order packSize → prev day daily_sales → stock_details → 12
+            const qtyFromOrder = extractQtyPerCaseFromPackSize(ord.packSize);
+            const qtyPerCase = qtyFromOrder > 0 ? qtyFromOrder : (prevSale?.quantityPerCase ?? stockMatch?.quantityPerCase ?? 12);
             const mrpOverride = findMrpOverride(ord.brandNumber, ord.size);
             const mrpVal = mrpOverride ? mrpOverride.salesMrp : (prevSale?.mrp ?? stockMatch?.mrp ?? "0");
 
