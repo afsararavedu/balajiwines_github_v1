@@ -50,6 +50,10 @@ export function useBulkUpdateSales() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.sales.list.path] });
+      // Invalidate stock + daily-stock caches so Stock page and next-day
+      // opening balances always reflect the updated values after saving sales.
+      queryClient.invalidateQueries({ queryKey: ["/api/stock"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/daily-stock"] });
     },
   });
 }

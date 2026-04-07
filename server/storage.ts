@@ -149,6 +149,7 @@ export class DatabaseStorage implements IStorage {
         .onConflictDoUpdate({
           target: [dailySales.brandNumber, dailySales.size, dailySales.saleDate],
           set: {
+            quantityPerCase: sale.quantityPerCase,
             openingBalanceBottles: sale.openingBalanceBottles,
             newStockCases: sale.newStockCases,
             newStockBottles: sale.newStockBottles,
@@ -584,8 +585,13 @@ export class DatabaseStorage implements IStorage {
         // SET closing-stock values (never decrease below what's saved)
         const existingMrp = parseFloat(String(matchedStock.mrp ?? '0')) || 0;
         const newMrp = saleMrp > 0 ? saleMrp : existingMrp;
+        // Also update quantityPerCase if sale has a corrected value (from order pack_size)
+        const newQtyPerCase = (sale.quantityPerCase && sale.quantityPerCase > 0)
+          ? sale.quantityPerCase
+          : (matchedStock.quantityPerCase ?? 12);
         await db.update(stockDetails)
           .set({
+            quantityPerCase: newQtyPerCase,
             stockInCases: sale.closingBalanceCases ?? 0,
             stockInBottles: sale.closingBalanceBottles ?? 0,
             totalStockBottles: totalBottles,
@@ -651,6 +657,7 @@ export class DatabaseStorage implements IStorage {
       }).onConflictDoUpdate({
         target: [dailyStock.brandNumber, dailyStock.size, dailyStock.date],
         set: {
+          quantityPerCase: sale.quantityPerCase,
           stockInCases: sale.closingBalanceCases ?? 0,
           stockInBottles: sale.closingBalanceBottles ?? 0,
           totalStockBottles: sale.totalClosingStock ?? 0,
