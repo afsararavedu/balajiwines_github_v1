@@ -77,6 +77,11 @@ const EMPTY_ROW: InsertOrder = {
   icdcNumber: "",
 };
 
+const fmt2 = (v: string | number | null | undefined): string => {
+  const n = parseFloat(String(v ?? "0").replace(/,/g, ""));
+  return isNaN(n) ? String(v ?? "0") : n.toFixed(2);
+};
+
 export default function Inventory() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -618,9 +623,9 @@ export default function Inventory() {
                                 <td className="table-cell text-sm">{order.packSize}</td>
                                 <td className="table-cell text-right font-mono text-sm bg-blue-50/10">{order.qtyCasesDelivered}</td>
                                 <td className="table-cell text-right font-mono text-sm bg-blue-50/10">{order.qtyBottlesDelivered}</td>
-                                <td className="table-cell text-right font-mono text-sm">{order.ratePerCase}</td>
-                                <td className="table-cell text-right font-mono text-sm">{order.unitRatePerBottle}</td>
-                                <td className="table-cell text-right font-bold text-primary font-mono bg-primary/5">{order.totalAmount}</td>
+                                <td className="table-cell text-right font-mono text-sm">{fmt2(order.ratePerCase)}</td>
+                                <td className="table-cell text-right font-mono text-sm">{fmt2(order.unitRatePerBottle)}</td>
+                                <td className="table-cell text-right font-bold text-primary font-mono bg-primary/5">{fmt2(order.totalAmount)}</td>
                                 <td className="table-cell text-right font-mono text-sm">{order.breakageBottleQty}</td>
                               </tr>
                             );
@@ -733,7 +738,7 @@ export default function Inventory() {
                           <td className="p-2 border-b border-border">
                             <input type="number" className="input-field text-right font-mono" value={row.unitRatePerBottle || ""} onChange={(e) => handleRowChange(idx, "unitRatePerBottle", e.target.value)} />
                           </td>
-                          <td className="table-cell text-right font-bold text-primary font-mono bg-primary/5">₹{row.totalAmount}</td>
+                          <td className="table-cell text-right font-bold text-primary font-mono bg-primary/5">₹{fmt2(row.totalAmount)}</td>
                           <td className="p-2 border-b border-border">
                             <input type="number" className="input-field text-right font-mono" value={row.breakageBottleQty ?? 0} onChange={(e) => handleRowChange(idx, "breakageBottleQty", parseInt(e.target.value, 10) || 0)} />
                           </td>
@@ -1037,9 +1042,9 @@ export default function Inventory() {
                       <td className="table-cell text-sm">{row.packSize}</td>
                       <td className="table-cell text-right font-mono text-sm bg-blue-50/10">{row.qtyCasesDelivered}</td>
                       <td className="table-cell text-right font-mono text-sm bg-blue-50/10">{row.qtyBottlesDelivered}</td>
-                      <td className="table-cell text-right font-mono text-sm">{row.ratePerCase}</td>
-                      <td className="table-cell text-right font-mono text-sm">{row.unitRatePerBottle}</td>
-                      <td className="table-cell text-right font-bold text-primary font-mono bg-primary/5">{row.totalAmount}</td>
+                      <td className="table-cell text-right font-mono text-sm">{fmt2(row.ratePerCase)}</td>
+                      <td className="table-cell text-right font-mono text-sm">{fmt2(row.unitRatePerBottle)}</td>
+                      <td className="table-cell text-right font-bold text-primary font-mono bg-primary/5">{fmt2(row.totalAmount)}</td>
                       <td className="table-cell text-right font-mono text-sm">{row.breakageBottleQty}</td>
                       <td className="table-cell text-sm text-muted-foreground">{row.remarks || "-"}</td>
                     </tr>

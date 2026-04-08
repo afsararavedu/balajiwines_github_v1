@@ -112,7 +112,8 @@ function rowToOrder(
       field === "unitRatePerBottle" ||
       field === "totalAmount"
     ) {
-      (order as any)[field] = String(val);
+      const numVal = parseFloat(String(val).replace(/,/g, ""));
+      (order as any)[field] = isNaN(numVal) ? "0" : numVal.toFixed(2);
     } else if (field === "invoiceDate") {
       // Excel stores dates as serial numbers — convert to readable string
       if (typeof val === "number" && val > 1000) {
@@ -175,9 +176,9 @@ function parseSpreadsheet(buffer: Buffer, filename: string) {
           packSize: vals[4] || "",
           qtyCasesDelivered: parseInt(vals[5]) || 0,
           qtyBottlesDelivered: parseInt(vals[6]) || 0,
-          ratePerCase: vals[7] || "0",
-          unitRatePerBottle: vals[8] || "0",
-          totalAmount: vals[9] || "0",
+          ratePerCase: (parseFloat(vals[7]) || 0).toFixed(2),
+          unitRatePerBottle: (parseFloat(vals[8]) || 0).toFixed(2),
+          totalAmount: (parseFloat(vals[9]) || 0).toFixed(2),
           breakageBottleQty: parseInt(vals[10]) || 0,
           remarks: vals[11] || "",
         });
