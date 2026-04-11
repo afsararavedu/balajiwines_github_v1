@@ -93,6 +93,14 @@ function mapHeaderToField(header: string): keyof typeof EMPTY_ORDER | null {
   return COLUMN_MAP[normalized] || null;
 }
 
+/** Pad brand numbers to 4 digits with leading zeros (e.g. "19" → "0019", "110" → "0110") */
+function padBrandNumber(raw: string): string {
+  const s = String(raw).trim();
+  // Only pad if it's a pure numeric string of fewer than 4 digits
+  if (/^\d{1,3}$/.test(s)) return s.padStart(4, "0");
+  return s;
+}
+
 function rowToOrder(
   row: Record<string, any>,
   headerMap: Record<string, keyof typeof EMPTY_ORDER>,
@@ -121,6 +129,8 @@ function rowToOrder(
       } else {
         (order as any)[field] = String(val).trim();
       }
+    } else if (field === "brandNumber") {
+      (order as any)[field] = padBrandNumber(String(val));
     } else {
       (order as any)[field] = String(val);
     }
@@ -169,7 +179,7 @@ function parseSpreadsheet(buffer: Buffer, filename: string) {
       if (vals.length >= 2) {
         orders.push({
           ...EMPTY_ORDER,
-          brandNumber: vals[0] || "",
+          brandNumber: padBrandNumber(vals[0] || ""),
           brandName: vals[1] || "",
           productType: vals[2] || "",
           packType: vals[3] || "",
