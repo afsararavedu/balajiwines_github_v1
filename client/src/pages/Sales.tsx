@@ -303,18 +303,34 @@ export default function Sales() {
       return;
     }
     const wsData = [
-      ["Brand No", "Brand Name", "Size", "Cls Bal (Cs)", "Cls Bal (Btls)", "Breakage"],
-      ...localSales.map(s => [
-        s.brandNumber,
-        s.brandName,
-        s.size,
-        "",
-        "",
-        "",
-      ]),
+      ["Brand No", "Brand Name", "Size", "Qty/Case", "Opening Bal (Btls)", "New Stock (Cs)", "New Stock (Btls)", "Total Stock", "Cls Bal (Cs)", "Cls Bal (Btls)", "Breakage"],
+      ...localSales.map(s => {
+        const qtyPerCase = s.quantityPerCase || 0;
+        const opBal = s.openingBalanceBottles || 0;
+        const newCs = s.newStockCases || 0;
+        const newBtls = s.newStockBottles || 0;
+        const totalStock = opBal + (qtyPerCase * newCs) + newBtls;
+        return [
+          s.brandNumber,
+          s.brandName,
+          s.size,
+          qtyPerCase,
+          opBal,
+          newCs,
+          newBtls,
+          totalStock,
+          "",
+          "",
+          "",
+        ];
+      }),
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws["!cols"] = [{ wch: 12 }, { wch: 40 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 12 }];
+    ws["!cols"] = [
+      { wch: 12 }, { wch: 40 }, { wch: 12 },
+      { wch: 10 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 14 },
+      { wch: 14 }, { wch: 16 }, { wch: 12 },
+    ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Sales Template");
     XLSX.writeFile(wb, `sales_template_${selectedDate}.xlsx`);
