@@ -1172,6 +1172,51 @@ export async function registerRoutes(
     }
   });
 
+  // ONE-TIME data export: generates a SQL file to migrate data to another database
+  app.get("/api/admin/export-data", async (_req, res) => {
+    try {
+      const tables = [
+        { name: "shop_details", conflict: "(id)" },
+        { name: "orders", conflict: "(id)" },
+        { name: "stock_details", conflict: "(id)" },
+        { name: "daily_sales", conflict: "(id)" },
+        { name: "daily_stock", conflict: "(id)" },
+        { name: "sales_mrp_details", conflict: "(id)" },
+      ];
+
+      let sql = `-- BRR Liquor Soft Data Export\n-- Generated: ${new Date().toISOString()}\n-- Run this on your target database\n\n`;
+
+      for (const { name, conflict } of tables) {
+        const result = await pool.query(`SELECT * FROM ${name} ORDER BY id`);
+        if (result.rows.length === 0) {
+          sql += `-- ${name}: no data\n\n`;
+          continue;
+        }
+
+        const cols = result.fields.map((f) => `"${f.name}"`).join(", ");
+        sql += `-- ${name} (${result.rows.length} rows)\n`;
+
+        for (const row of result.rows) {
+          const vals = result.fields.map((f) => {
+            const v = row[f.name];
+            if (v === null || v === undefined) return "NULL";
+            if (typeof v === "number" || typeof v === "boolean") return String(v);
+            if (v instanceof Date) return `'${v.toISOString()}'`;
+            return `'${String(v).replace(/'/g, "''")}'`;
+          }).join(", ");
+          sql += `INSERT INTO ${name} (${cols}) VALUES (${vals}) ON CONFLICT ${conflict} DO NOTHING;\n`;
+        }
+        sql += `\n`;
+      }
+
+      res.setHeader("Content-Type", "text/plain");
+      res.setHeader("Content-Disposition", `attachment; filename="brr_export_${new Date().toISOString().slice(0, 10)}.sql"`);
+      res.send(sql);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/shop-details", async (_req, res) => {
     try {
       const details = await storage.getShopDetails();
